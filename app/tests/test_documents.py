@@ -1,22 +1,34 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from app.main import app
-
-
-client = TestClient(app)
+from app.models.document import Document
 
 
-def test_get_existing_document():
-    response = client.get("/documents/1")
+def test_get_existing_document(
+    client: TestClient,
+    db: Session
+):
+    document = Document(
+        title = "Example document",
+        content = "Example content"
+    )
+
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    
+    response = client.get(f"/documents/{document.id}")
 
     assert response.status_code == 200
     assert response.json() == {
-        "id": 1,
+        "id": document.id,
         "title": "Example document",
         "content": "Example content",
     }
 
-def test_get_missing_document():
+def test_get_missing_document(
+    client: TestClient
+):
     response = client.get("/documents/999")
 
     assert response.status_code == 404
@@ -24,7 +36,10 @@ def test_get_missing_document():
         "detail": "Document 999 not found"
     }
 
-def test_create_document():
+def test_create_document(
+    client: TestClient,
+    db: Session
+):
     response = client.post(
         "/documents",
         json = {
@@ -34,26 +49,46 @@ def test_create_document():
     )
 
     assert response.status_code == 201
-    assert response.json() == {
-        "id": 1,
-        "title": "My document",
-        "content": "Hello Retrivo"
-    }
 
-def test_create_document_with_empty_title():
+    data = response.json()
+
+    assert data["title"] == "My document"
+    assert data["content"] == "Hello Retrivo"
+
+    db_document = db.get(Document, data["id"])
+
+    assert db_document is not None
+    assert db_document.title == "My document"
+    assert db_document.content == "Hello Retrivo"
+
+def test_create_document_with_empty_title(
+    client: TestClient
+):
     response = client.post(
         "/documents",
         json = {
             "title": "",
-            "content": "Hello"
+            "content": "Hello Retrivo"
         }
     )
 
     assert response.status_code == 422
 
-def test_patch_document():
+def test_patch_document(
+    client: TestClient,
+    db: Session
+):
+    document = Document(
+        title = "Original title",
+        content = "Original content"
+    )
+
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    
     response = client.patch(
-        "/documents/1",
+        f"/documents/{document.id}",
         json = {
             "title": "Updated title"
         }
@@ -61,38 +96,78 @@ def test_patch_document():
 
     assert response.status_code == 200
     assert response.json() == {
-        "id": 1,
+        "id": document.id,
         "title": "Updated title",
-        "content": "Example content"
+        "content": "Original content"
     }
 
-def test_delete_document():
-    response = client.delete("/documents/1")
+    db.refresh(document)
+
+    assert document.title == "Updated title"
+    assert document.content == "Original content"
+
+def test_delete_document(
+    client: TestClient,
+    db: Session
+):
+    document = Document(
+        title = "Document to delete",
+        content = "This document will be deleted"
+    )
+
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+    
+    response = client.delete(f"/documents/{document.id}")
 
     assert response.status_code == 204
     assert response.content == b""
 
-def test_list_documents_with_pagination():
+    db.expire_all()
+
+    deleted_document = db.get(Document, document.id)
+
+    assert deleted_document is None
+
+def test_list_documents_with_pagination(
+    client: TestClient,
+    db: Session
+):
+    documents = [
+        Document(title="Document 1", content="Content 1"),
+        Document(title="Document 2", content="Content 2"),
+        Document(title="Document 3", content="Content 3"),
+        Document(title="Document 4", content="Content 4"),
+    ]
+
+    db.add_all(documents)
+    db.commit()
+
     response = client.get(
         "/documents",
         params = {
-            "limit": 5,
-            "offset": 10
+            "limit": 2,
+            "offset": 1
         }
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "limit": 5,
-        "offset": 10,
-        "documents": []
-    }
 
-def test_invalid_pagination_limit():
+    data = response.json()
+
+    assert len(data) == 2
+    assert data[0]["title"] == "Document 2"
+    assert data[1]["title"] == "Document 3"
+
+def test_invalid_pagination_limit(
+    client: TestClient
+):
     response = client.get(
         "/documents",
         params = {
-            "limit": 500,
+            "limit": 0,
+            "offset": 0
         }
     )
 
