@@ -3,13 +3,20 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.exceptions import DocumentNotFoundError
 from app.dependencies import get_db, pagination_params
 from app.models.document import Document
-from app.exceptions import DocumentNotFoundError
 from app.schemas.documents import (
     DocumentCreate,
     DocumentResponse,
     DocumentUpdate,
+)
+from app.repositories.documents import(
+    create_document as create_document_in_db,
+    get_document_by_id,
+    update_document as update_document_in_db,
+    delete_document as delete_document_in_db,
+    list_documents as list_documents_from_db
 )
 
 
@@ -28,12 +35,12 @@ def create_document(
     document: DocumentCreate,
     db: Session = Depends(get_db)
 ):
-    db_document = Document(
+    db_document = create_document_in_db(
+        db = db,
         title = document.title,
         content = document.content
     )
 
-    db.add(db_document)
     db.commit()
     db.refresh(db_document)
 
@@ -48,9 +55,7 @@ def get_document(
     document_id: int,
     db: Session = Depends(get_db)
 ):
-    statement = select(Document).where(Document.id == document_id)
-
-    db_document = db.scalar(statement)
+    db_document = get_document_by_id(db, document_id)
 
     if db_document is None:
         raise DocumentNotFoundError(document_id)
@@ -67,16 +72,15 @@ def update_document(
     update: DocumentUpdate,
     db: Session = Depends(get_db)
 ):
-    statement = select(Document).where(Document.id == document_id)
-    db_document = db.scalar(statement)
+    db_document = get_document_by_id(db, document_id)
     
     if db_document is None:
         raise DocumentNotFoundError(document_id)
+    
 
     update_data = update.model_dump(exclude_unset = True)
 
-    for field, value in update_data.items():
-        setattr(db_document, field, value)
+    db_document = update_document_in_db(db, db_document, update_data)
 
     db.commit()
     db.refresh(db_document)
@@ -92,13 +96,12 @@ def delete_document(
     document_id: int,
     db: Session = Depends(get_db)
 ):
-    statement = select(Document).where(Document.id == document_id)
-    db_document = db.scalar(statement)
+    db_document = get_document_by_id(db, document_id)
     
     if db_document is None:
         raise DocumentNotFoundError(document_id)
 
-    db.delete(db_document)
+    delete_document_in_db(db, db_document)
     db.commit()
 
     return Response(status_code = status.HTTP_204_NO_CONTENT)
@@ -112,13 +115,10 @@ def list_documents(
     pagination: dict = Depends(pagination_params),
     db: Session = Depends(get_db)
 ):
-    statement = (
-        select(Document)
-        .order_by(Document.id)
-        .offset(pagination["offset"])
-        .limit(pagination["limit"])
+    documents = list_documents_from_db(
+        db,
+        pagination["offset"],
+        pagination["limit"]
     )
-
-    documents = db.scalars(statement).all()
 
     return documents

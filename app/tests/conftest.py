@@ -23,27 +23,28 @@ if TEST_DATABASE_URL is None:
 test_engine = create_engine(TEST_DATABASE_URL)
 
 TestingSessionLocal = sessionmaker(
-    bind=test_engine,
-    autoflush=False,
-    autocommit=False,
+    bind = test_engine,
+    autoflush = False,
+    autocommit = False,
 )
 
 
 @pytest.fixture
 def db() -> Generator[Session, None, None]:
-    Base.metadata.create_all(bind=test_engine)
+    Base.metadata.create_all(bind = test_engine)
 
-    connection = test_engine.connect()
-    transaction = connection.begin()
-
-    session = TestingSessionLocal(bind=connection)
+    session = TestingSessionLocal()
 
     try:
         yield session
     finally:
+        session.rollback()
+
+        for table in reversed(Base.metadata.sorted_tables):
+            session.execute(table.delete())
+
+        session.commit()
         session.close()
-        transaction.rollback()
-        connection.close()
 
 
 @pytest.fixture

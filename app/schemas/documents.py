@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class DocumentCreate(BaseModel):
@@ -16,6 +16,14 @@ class DocumentUpdate(BaseModel):
         default=None,
         min_length=1,
     )
+
+    @field_validator("title", "content")
+    @classmethod
+    def reject_null(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Field cannot be null")
+
+        return value
 
 
 class DocumentResponse(BaseModel):

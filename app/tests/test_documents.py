@@ -172,3 +172,23 @@ def test_invalid_pagination_limit(
     )
 
     assert response.status_code == 422
+
+def test_patch_document_rejects_null_title(
+    client: TestClient,
+    db: Session
+):
+    document = Document(
+        title = "Original title",
+        content = "Original content"
+    )
+
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    response = client.patch(
+        f"/documents/{document.id}",
+        json = {"title": None}
+    )
+
+    assert response.status_code == 422
