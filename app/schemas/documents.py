@@ -1,4 +1,8 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models.document import DocumentStatus
 
 
 class DocumentCreate(BaseModel):
@@ -27,8 +31,12 @@ class DocumentUpdate(BaseModel):
 
 
 class DocumentResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
+    model_config = ConfigDict(from_attributes = True)
+
     id: int
     title: str
-    content: str
+    filename: str
+    content_type: str
+    content: str | None
+    status: DocumentStatus
+    created_at: datetime

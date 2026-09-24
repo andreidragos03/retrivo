@@ -1,23 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status, File, Form, UploadFile
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.exceptions import DocumentNotFoundError
 from app.dependencies import get_db, pagination_params
-from app.models.document import Document
 from app.schemas.documents import (
     DocumentCreate,
     DocumentResponse,
     DocumentUpdate,
 )
 from app.repositories.documents import(
-    create_document as create_document_in_db,
     get_document_by_id,
     update_document as update_document_in_db,
     delete_document as delete_document_in_db,
     list_documents as list_documents_from_db
 )
+from app.extractors.exceptions import DocumentExtractionError
+from app.extractors.pdf import extract_text_from_pdf
+from app.services.ingestion import create_pending_document, process_pdf_document
 
 
 router = APIRouter(
@@ -27,24 +28,49 @@ router = APIRouter(
 
 
 @router.post(
-    "",
+    "/upload",
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_document(
-    document: DocumentCreate,
-    db: Session = Depends(get_db)
+async def upload_document(
+    title: str = Form(...),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
 ):
-    db_document = create_document_in_db(
-        db = db,
-        title = document.title,
-        content = document.content
+    if file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=415,
+            detail="Unsupported file type. Only PDF files are supported.",
+        )
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=422,
+            detail="The uploaded file must have a filename.",
+        )
+
+    file_bytes = await file.read()
+
+    document = create_pending_document(
+        db=db,
+        title=title,
+        filename=file.filename,
+        content_type=file.content_type,
     )
 
-    db.commit()
-    db.refresh(db_document)
+    try:
+        document = process_pdf_document(
+            db=db,
+            document=document,
+            file_bytes=file_bytes,
+        )
+    except DocumentExtractionError:
+        raise HTTPException(
+            status_code=422,
+            detail="The uploaded PDF could not be processed.",
+        )
 
-    return db_document
+    return document
 
 
 @router.get(

@@ -1,23 +1,48 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.document import Document
+from app.models.document import Document, DocumentStatus
 
 
 def create_document(
     db: Session,
     title: str,
-    content: str
+    filename: str,
+    content_type: str
 ) -> Document:
     document = Document(
         title = title,
-        content = content
+        filename = filename,
+        content_type = content_type
     )
 
     db.add(document)
     db.flush()
 
     return document
+
+
+def update_document_status(
+    db: Session,
+    document: Document,
+    status: DocumentStatus
+) -> Document:
+    document.status = status
+    db.flush()
+
+    return document
+
+
+def set_document_content(
+    db: Session,
+    document: Document,
+    content: str
+) -> Document:
+    document.content = content
+    db.flush()
+
+    return document
+
 
 def get_document_by_id(
     db: Session,
