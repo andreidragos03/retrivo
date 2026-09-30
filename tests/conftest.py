@@ -29,10 +29,18 @@ TestingSessionLocal = sessionmaker(
 )
 
 
-@pytest.fixture
-def db() -> Generator[Session, None, None]:
+@pytest.fixture(scope = "session", autouse = True)
+def setup_test_database():
+    Base.metadata.drop_all(bind = test_engine)
     Base.metadata.create_all(bind = test_engine)
 
+    yield
+
+    Base.metadata.drop_all(bind=test_engine)
+
+
+@pytest.fixture
+def db() -> Generator[Session, None, None]:
     session = TestingSessionLocal()
 
     try:

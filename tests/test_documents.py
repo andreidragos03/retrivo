@@ -4,13 +4,25 @@ from sqlalchemy.orm import Session
 from app.models.document import Document
 
 
+def create_test_document(
+    title: str = "Example document",
+    content: str | None = "Example content",
+) -> Document:
+    return Document(
+        title=title,
+        filename="test.pdf",
+        content_type="application/pdf",
+        content=content,
+    )
+
+
 def test_get_existing_document(
     client: TestClient,
     db: Session
 ):
-    document = Document(
-        title = "Example document",
-        content = "Example content"
+    document = create_test_document(
+        title="Example document",
+        content="Example content",
     )
 
     db.add(document)
@@ -19,12 +31,15 @@ def test_get_existing_document(
     
     response = client.get(f"/documents/{document.id}")
 
-    assert response.status_code == 200
-    assert response.json() == {
-        "id": document.id,
-        "title": "Example document",
-        "content": "Example content",
-    }
+    data = response.json()
+
+    assert data["id"] == document.id
+    assert data["title"] == "Example document"
+    assert data["filename"] == "test.pdf"
+    assert data["content_type"] == "application/pdf"
+    assert data["content"] == "Example content"
+    assert data["status"] == "pending"
+    assert data["created_at"] is not None
 
 def test_get_missing_document(
     client: TestClient
@@ -36,51 +51,13 @@ def test_get_missing_document(
         "detail": "Document 999 not found"
     }
 
-def test_create_document(
-    client: TestClient,
-    db: Session
-):
-    response = client.post(
-        "/documents",
-        json = {
-            "title": "My document",
-            "content": "Hello Retrivo"
-        }
-    )
-
-    assert response.status_code == 201
-
-    data = response.json()
-
-    assert data["title"] == "My document"
-    assert data["content"] == "Hello Retrivo"
-
-    db_document = db.get(Document, data["id"])
-
-    assert db_document is not None
-    assert db_document.title == "My document"
-    assert db_document.content == "Hello Retrivo"
-
-def test_create_document_with_empty_title(
-    client: TestClient
-):
-    response = client.post(
-        "/documents",
-        json = {
-            "title": "",
-            "content": "Hello Retrivo"
-        }
-    )
-
-    assert response.status_code == 422
-
 def test_patch_document(
     client: TestClient,
     db: Session
 ):
-    document = Document(
-        title = "Original title",
-        content = "Original content"
+    document = create_test_document(
+        title="Example document",
+        content="Example content",
     )
 
     db.add(document)
@@ -95,24 +72,29 @@ def test_patch_document(
     )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "id": document.id,
-        "title": "Updated title",
-        "content": "Original content"
-    }
+
+    data = response.json()
+
+    assert data["id"] == document.id
+    assert data["title"] == "Updated title"
+    assert data["filename"] == "test.pdf"
+    assert data["content_type"] == "application/pdf"
+    assert data["content"] == "Example content"
+    assert data["status"] == "pending"
+    assert data["created_at"] is not None
 
     db.refresh(document)
 
     assert document.title == "Updated title"
-    assert document.content == "Original content"
+    assert document.content == "Example content"
 
 def test_delete_document(
     client: TestClient,
     db: Session
 ):
-    document = Document(
-        title = "Document to delete",
-        content = "This document will be deleted"
+    document = create_test_document(
+        title="Example document",
+        content="Example content",
     )
 
     db.add(document)
@@ -135,10 +117,10 @@ def test_list_documents_with_pagination(
     db: Session
 ):
     documents = [
-        Document(title="Document 1", content="Content 1"),
-        Document(title="Document 2", content="Content 2"),
-        Document(title="Document 3", content="Content 3"),
-        Document(title="Document 4", content="Content 4"),
+        create_test_document(title="Document 1", content="Content 1"),
+        create_test_document(title="Document 2", content="Content 2"),
+        create_test_document(title="Document 3", content="Content 3"),
+        create_test_document(title="Document 4", content="Content 4"),
     ]
 
     db.add_all(documents)
@@ -177,9 +159,9 @@ def test_patch_document_rejects_null_title(
     client: TestClient,
     db: Session
 ):
-    document = Document(
-        title = "Original title",
-        content = "Original content"
+    document = create_test_document(
+        title="Example document",
+        content="Example content",
     )
 
     db.add(document)

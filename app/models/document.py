@@ -1,10 +1,14 @@
+from typing import TYPE_CHECKING
 from enum import Enum
 from datetime import datetime
 
 from sqlalchemy import DateTime, Enum as SQLEnum, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.document_chunk import DocumentChunk
 
 
 class DocumentStatus(str, Enum):
@@ -56,4 +60,10 @@ class Document(Base):
         DateTime(timezone = True),
         nullable = False,
         server_default = func.now()
+    )
+
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates = "document",
+        cascade = "all, delete-orphan",
+        passive_deletes = True
     )

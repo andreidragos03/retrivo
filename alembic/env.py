@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 from app.models.base import Base
 from app.models.document import Document
+from app.models.document_chunk import DocumentChunk
 
 load_dotenv()
 
