@@ -24,3 +24,19 @@ def create_document_chunks(
     db.flush()
 
     return document_chunks
+
+
+def set_chunk_embeddings(
+    db: Session,
+    chunks: list[DocumentChunk],
+    embeddings: list[list[float]]
+) -> None:
+    if len(chunks) != len(embeddings):
+        raise ValueError(
+            "Number of chunks must match number of embeddings"
+        )
+
+    for chunk, embedding in zip(chunks, embeddings):
+        chunk.embedding = embedding
+
+    db.flush()

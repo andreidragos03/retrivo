@@ -15,33 +15,31 @@ from app.main import app
 load_dotenv()
 
 
-TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+@pytest.fixture(scope = "session")
+def test_engine():
+    test_database_url = os.getenv("TEST_DATABASE_URL")
 
-if TEST_DATABASE_URL is None:
-    raise RuntimeError("TEST_DATABASE_URL is not set")
+    if test_database_url is None:
+        raise RuntimeError("TEST_DATABASE_URL is not set")
 
-test_engine = create_engine(TEST_DATABASE_URL)
+    engine = create_engine(test_database_url)
 
-TestingSessionLocal = sessionmaker(
-    bind = test_engine,
-    autoflush = False,
-    autocommit = False,
-)
+    Base.metadata.create_all(bind = engine)
 
+    yield engine
 
-@pytest.fixture(scope = "session", autouse = True)
-def setup_test_database():
-    Base.metadata.drop_all(bind = test_engine)
-    Base.metadata.create_all(bind = test_engine)
-
-    yield
-
-    Base.metadata.drop_all(bind=test_engine)
+    engine.dispose()
 
 
 @pytest.fixture
-def db() -> Generator[Session, None, None]:
-    session = TestingSessionLocal()
+def db(test_engine) -> Generator[Session, None, None]:
+    testing_session_local = sessionmaker(
+        bind = test_engine,
+        autoflush = False,
+        autocommit = False,
+    )
+
+    session = testing_session_local()
 
     try:
         yield session
