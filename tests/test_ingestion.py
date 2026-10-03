@@ -46,6 +46,23 @@ def create_test_pdf_with_lines(lines: list[str]) -> bytes:
 def fail_to_create_chunks(*args, **kwargs):
     raise RuntimeError("Simulated chunk persistence failure")
 
+def fail_to_create_embeddings(*args, **kwargs):
+    raise RuntimeError("Simulated embedding generation failure")
+
+def fake_create_embeddings(texts: list[str]) -> list[list[float]]:
+    return [
+        [0.1] * 1536
+        for _ in texts
+    ]
+
+
+@pytest.fixture(autouse = True)
+def mock_create_embeddings(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.ingestion.create_embeddings",
+        fake_create_embeddings
+    )
+
 
 def test_upload_pdf_creates_ready_document_and_chunks(
     client: TestClient,
@@ -94,6 +111,9 @@ def test_upload_pdf_creates_ready_document_and_chunks(
     assert chunks[0].document_id == document_id
     assert chunks[0].chunk_index == 0
     assert "Retrivo can extract and chunk PDF documents." in chunks[0].content
+
+    assert chunks[0].embedding is not None
+    assert len(chunks[0].embedding) == 1536
 
 def test_invalid_pdf_marks_document_failed_without_chunks(
     client: TestClient,
@@ -228,3 +248,51 @@ def test_upload_long_pdf_creates_multiple_ordered_chunks(
         len(chunk.content) <= 1000
         for chunk in chunks
     )
+
+def test_embedding_failure_rolls_back_content_and_chunks_and_marks_document_failed(
+    client: TestClient,
+    db: Session,
+    monkeypatch
+):
+    monkeypatch.setattr(
+        "app.services.ingestion.create_embeddings",
+        fail_to_create_embeddings
+    )
+
+    pdf_bytes = create_test_pdf(
+        "Extraction and chunk creation succeed before embedding generation fails."
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match = "Simulated embedding generation failure"
+    ):
+        client.post(
+            "/documents/upload",
+            data = {
+                "title": "Embedding Failure Document"
+            },
+            files = {
+                "file": (
+                    "embedding-failure.pdf",
+                    pdf_bytes,
+                    "application/pdf"
+                )
+            }
+        )
+
+    document = db.scalar(
+        select(Document)
+        .where(Document.title == "Embedding Failure Document")
+    )
+
+    assert document is not None
+    assert document.status == DocumentStatus.FAILED
+    assert document.content is None
+
+    chunks = db.scalars(
+        select(DocumentChunk)
+        .where(DocumentChunk.document_id == document.id)
+    ).all()
+
+    assert chunks == []

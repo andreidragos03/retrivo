@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from app.chunking.text import chunk_text
 from app.extractors.pdf import extract_text_from_pdf
 from app.models.document import Document, DocumentStatus
-from app.repositories.document_chunks import create_document_chunks
+from app.services.embeddings import create_embeddings
+from app.repositories.document_chunks import create_document_chunks, set_chunk_embeddings
 from app.repositories.documents import (
     create_document,
     set_document_content,
@@ -50,12 +51,20 @@ def process_pdf_document(
             content = extracted_text
         )
 
-        chunks = chunk_text(extracted_text)
+        chunk_texts = chunk_text(extracted_text)
 
-        create_document_chunks(
+        document_chunks = create_document_chunks(
             db = db,
             document = document,
-            chunks = chunks
+            chunks = chunk_texts
+        )
+
+        embeddings = create_embeddings(chunk_texts)
+
+        set_chunk_embeddings(
+            db = db,
+            chunks = document_chunks,
+            embeddings = embeddings
         )
 
         update_document_status(

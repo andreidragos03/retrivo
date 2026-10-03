@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 
 from app.exception_handlers import register_exception_handlers
 from app.routers.documents import router as documents_router
+from app.routers.search import router as search_router
 
 
 app = FastAPI()
@@ -12,6 +13,7 @@ register_exception_handlers(app)
 
 
 app.include_router(documents_router)
+app.include_router(search_router)
 
 
 @app.get("/")
